@@ -220,8 +220,8 @@ module.exports = {
         ......
 
 </code></pre>
-<p>Once done, you need to add the Web3modal package along with http. So under the project folder run <code>flutter pub add web3modal_flutter http</code>. You don&#39;t need to add web3dart package as it already bundle inside Web3Modal package.</p>
-<p>Also, another thing that important is to add our <code>contracts/artifacts</code> folder under assets in <code>pubspec.yaml</code> at the end to be able to load your contract info for deployment.</p>
+<p>Once done, you need to add the Web3modal package along with http. So under the project folder run <code>flutter pub add web3modal_flutter http</code>. You don&#39;t need to add web3dart package as it already bundle inside Web3Modal package. After adding the dependencies, you need to set the <code>minSdkVersion</code> to <code>23</code> in <code>android/app/build.gradle</code> file.</p>
+<p>Also, another thing that important is to add your <code>contracts/artifacts</code> folder under assets in <code>pubspec.yaml</code> at the end. So you can load your contract info for deployment.</p>
 <ul>
 <li><code>pubspec.yaml</code>:</li>
 </ul>
