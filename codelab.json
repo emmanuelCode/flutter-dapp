@@ -1,0 +1,19 @@
+{
+  "environment": "web",
+  "format": "html",
+  "prefix": "https://storage.googleapis.com",
+  "mainga": "UA-49880327-14",
+  "updated": "2024-05-12T17:56:50-04:00",
+  "id": "flutter-dapp",
+  "duration": 0,
+  "title": "Flutter Decentralized App (DApp)",
+  "authors": "emmanuelCode",
+  "summary": "Flutter Dapp",
+  "source": "flutter-dapp.md",
+  "theme": "",
+  "status": null,
+  "category": null,
+  "tags": [],
+  "feedback": "https://github.com/emmanuelCode/dapp-flutter/issues/new",
+  "url": "flutter-dapp"
+}

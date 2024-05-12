@@ -1,0 +1,652 @@
+
+<!doctype html>
+
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, minimum-scale=1.0, initial-scale=1.0, user-scalable=yes">
+  <meta name="theme-color" content="#4F7DC9">
+  <meta charset="UTF-8">
+  <title>Flutter Decentralized App (DApp)</title>
+  <link rel="stylesheet" href="//fonts.googleapis.com/css?family=Source+Code+Pro:400|Roboto:400,300,400italic,500,700|Roboto+Mono">
+  <link rel="stylesheet" href="//fonts.googleapis.com/icon?family=Material+Icons">
+  <link rel="stylesheet" href="https://storage.googleapis.com/claat-public/codelab-elements.css">
+  <style>
+    .success {
+      color: #1e8e3e;
+    }
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <google-codelab-analytics gaid="UA-49880327-14"></google-codelab-analytics>
+  <google-codelab codelab-gaid=""
+                  id="flutter-dapp"
+                  title="Flutter Decentralized App (DApp)"
+                  environment="web"
+                  feedback-link="https://github.com/emmanuelCode/dapp-flutter/issues/new">
+    
+      <google-codelab-step label="Getting Started" duration="0">
+        <h2 is-upgraded>Things to keep in mind</h2>
+<ul>
+<li>This codelabs was tested with Ubuntu in mind using the Terminal. For Mac and Windows, see their respective equivalent.</li>
+<li>The IDE I&#39;ve used for this codelab is VSCode, some extensions or plugins I may use not be available on other IDEs.</li>
+<li>This is my own codelab, I am not part of Google nor I have been endorsed by them.</li>
+</ul>
+<h2 class="checklist" is-upgraded>What you&#39;ll learn</h2>
+<ul class="checklist">
+<li>✅ Build a smart contract in Remix.</li>
+<li>✅ Setup Hardhat local chain for prototyping.</li>
+<li>✅ Setup your crypto wallet to receive transactions.</li>
+<li>✅ Build a Flutter app that connects to your crypto wallet.</li>
+<li>✅ Deploy your smart contract using the Flutter app.</li>
+<li>✅ Interact with your smart contract with the Flutter app</li>
+<li>✅ Perform transactions with your connected wallet.</li>
+</ul>
+<h2 is-upgraded>Prerequises</h2>
+<p>A minimum requirement of how a blockchain/smart contracts/wallets works as it will allow you to better follow this codelab. Knowledge of Flutter and a bit of Solidity(not required but does help).</p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Remix" duration="0">
+        <p>The first things that comes to mind when building a dapp is to write a smart contract that runs in the blockchain. The way we build a smart contract is by using a special IDE made for them the Remix-IDE.</p>
+<p>There are two reliable way you can get the Remix-IDE. You can download the <a href="https://github.com/ethereum/remix-desktop/releases" target="_blank">desktop</a> or access the online version with this official link <a href="https://remix.ethereum.org" target="_blank">https://remix.ethereum.org</a>. At the time of writting, the online version has all the latest features compared to the desktop version. If using the web version, keep in mind that you need extra installations and enable remixd to access your local files.</p>
+<p>Before we get into it. You&#39;ll need to create a new Flutter project using VSCode. Once done, you&#39;ll go back to Remix, locate your Flutter project and create a new <code>contracts</code> folder. This is where you&#39;ll put your solidity files(.sol) for your smart contract.</p>
+<p>You&#39;ll add two files, a <code>logic.sol</code> and a <code>storage.sol</code> solidity files and this will be it&#39;s contents:</p>
+<ul>
+<li><code>logic.sol</code>:</li>
+</ul>
+<pre><code language="language-solidity" class="language-solidity">// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.25.0;
+
+import { Storage } from &#34;contracts/storage.sol&#34;;
+
+// add and remove from total
+contract Logic is Storage {
+
+    event Log(address sender, uint amount, string message);
+
+    function add() public payable {
+
+        uint amount = msg.value;
+        
+        // update states
+        amountGiven[msg.sender] += amount;
+        totalAmount += amount;
+
+        emit Log(msg.sender,amount, &#34;added Ether&#34;) ;
+    }
+
+
+    function retrieve() public payable {
+
+        // store the amount balance from the contract
+        uint retrieveAmount = amountGiven[msg.sender];
+
+        // update states
+        amountGiven[msg.sender] = 0;
+        totalAmount -= retrieveAmount;
+        
+        // check if contract has enough balance
+        require(getContractBalance() &gt;= retrieveAmount, &#34;Insufficient contract balance&#34;);
+
+        // This is the current recommended method to send ether.
+        (bool sent,) = payable(msg.sender).call{value: retrieveAmount}(&#34;&#34;);
+        require(sent, &#34;Failed to send Ether to User&#34;);
+     
+        emit Log(address(this), retrieveAmount, &#34;retrieve Ether&#34;) ;
+
+    }
+
+    function getContractBalance() public view returns(uint) {
+        return address(this).balance;
+    }
+
+
+}
+
+</code></pre>
+<ul>
+<li><code>storage.sol</code>:</li>
+</ul>
+<pre><code language="language-solidity" class="language-solidity">// SPDX-License-Identifier: UNLICENSED
+
+pragma solidity ^0.8.25.0;
+
+contract Storage {
+
+   uint public totalAmount;
+
+   mapping(address =&gt; uint) public amountGiven;
+
+}
+</code></pre>
+<p>If I explain the contract briefly, it allows you to store any amount of Ether and retrieve all of it whenever you want. Only the user can retrieve the total value of all the amounts added over time. So if it were another user, that user wouldn&#39;t be able to empty the smart contract balance only what the user stored.</p>
+<p>You can test the smart contract by compiling it and add Ether to it and see the expected result. Also it is essential to compile the contract at least once. The main reason for this is the creation of the generated <code>artifacts</code> folder that you&#39;ll need to locate the contract data and abi to load into the Flutter app and deploy it.</p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Hardhat" duration="0">
+        <p>The Remix-IDE has some limitations, unfortunatetly you can not directly connect outside app with the test chain provided with Remix VM. It doesn&#39;t expose an RPC link to interact with the smart contract on the test chain.</p>
+<p>This is where Hardhat comes in. you&#39;ll use it to create a test chain that you&#39;ll be able to connect with the Flutter app via an RPC link.</p>
+<h2 is-upgraded>Setup</h2>
+<p>To make it easer for development, you will add a <code>hardhat</code> folder into the Flutter project. You will create a <code>.gitignore</code> file so to not push Hardhat generated file that you&#39;ll generate soon.</p>
+<ul>
+<li><code>.gitignore</code>:</li>
+</ul>
+<pre><code># hardhat files to ignore 
+node_modules
+package.json
+package-lock.json
+</code></pre>
+<p>Before installing Hardhat make sure you have Node.js installed. You can find the instruction <a href="https://github.com/nodesource/distributions#installation-instructions" target="_blank">here</a>. Then inside the <code>hardhat</code> folder that you created, open a Terminal and run <code>npm install --save-dev hardhat</code>. Then run <code>npx hardhat init</code> You should see something that would look like this:</p>
+<p class="image-container"><img src="img/e79b40411102a1c0.png"></p>
+<p>choose <code>create an empty hardhat.config.js</code> then a file will be created with the following:</p>
+<ul>
+<li><code>hardhat.config.js</code>:</li>
+</ul>
+<pre><code language="language-javascript" class="language-javascript">/** @type import(&#39;hardhat/config&#39;).HardhatUserConfig */
+module.exports = {
+  solidity: &#34;0.8.25&#34;,
+};
+</code></pre>
+<p>The solidity value here represent the compiler version. Makes sure it&#39;s matches the compiler version on your solidity files. To run a test chain, run <code>npx hardhat node</code> inside the <code>hardhat</code> folder. You&#39;ll get a list of 20 generated account with 10000 ETH loaded along with their addresses and private keys:</p>
+<p class="image-container"><img src="img/bc419c68073332e9.png"></p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Metamask" duration="0">
+        <p>After setting up Hardhat, you&#39;ll need a crypto wallet to connect your test chain and handle transactions. There are many different crypto wallet to choose from but you&#39;ll use the popular Metamask wallet. On your Android phone, go to Google Play and download <a href="https://play.google.com/store/apps/details?id=io.metamask" target="_blank">Metamask</a>. In Metamask, you&#39;ll need to import one of the 20 generated accounts from Hardhat. However Metamask doesn&#39;t allow importing private keys without creating a account. So I suggest creating a dummy account or import a 12 words seed phrase to get access.</p>
+<p>Once your in, you&#39;ll add a new address by importing a Hardhat private key.</p>
+<table>
+<tr><td colspan="2" rowspan="1"></td><td colspan="1" rowspan="1"></td></tr>
+<tr><td colspan="1" rowspan="1"><p class="image-container"><img src="img/3e738dd5839ac97c.png"></p>
+</td><td colspan="1" rowspan="1"><p class="image-container"><img src="img/f266ea23b8bb3e4a.png"></p>
+</td></tr>
+</table>
+<p>After importing the private key. Go to network section in custom network tab and add in the following detail.</p>
+<table>
+<tr><td colspan="2" rowspan="1"></td><td colspan="1" rowspan="1"></td></tr>
+<tr><td colspan="1" rowspan="1"><p class="image-container"><img src="img/4fe770f147554f10.png"></p>
+</td><td colspan="1" rowspan="1"><p class="image-container"><img src="img/c049f9b06cb65edb.png"></p>
+</td></tr>
+</table>
+<p>The RPC link and chain id are default values Hardhat uses for the test chain. In order for Metamask to detect your test chain, you&#39;ll need to connect your Android phone to the computer by USB. Then go to your Android SDK folder(Android/SDK/platform-tools) and run the adb command <code>./adb reverse tcp:8545 tcp:8545</code>. After doing that step you&#39;ll be able to switch over to the Hardhat network. After doing those steps you should see that you have 10000 ETH which comes from the Hardhat test chain.</p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Wallet Connect" duration="0">
+        <p>To make our transactions and connect the app with multiple crypto wallets such as Metamask. You&#39;ll use the Web3Modal from Wallet Connect. So you&#39;ll need to sign up to get an id.</p>
+<p>Head over to <a href="https://cloud.walletconnect.com/sign-up" target="_blank">Wallet Connect Cloud</a> and sign up. <img src="img/204479ac37c6333.png"></p>
+<p>Under project click create <img src="img/610872fd00f36010.png"></p>
+<p>Add your project name and click wallet. You don&#39;t have to add a homepage url. <img src="img/721e7d8f3b0eff10.png"></p>
+<p>Under Dashboard you can see your project id that you can copy. <img src="img/8bcce3b43e15ef96.png"></p>
+<p>With that, your project is ready to use with Web3Modal.</p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="The Flutter App (Preparations)" duration="0">
+        <p>The app you&#39;ll build will contains buttons on top to connect your Metamask wallet with Wallet Connect or select network or viewing details. The purple button below will allow you to request transactions with Metamask such as deploying your contract done in Remix and add or retrieve Ether from the deployed smart contract. The Flutter app will transition to Metamask to process the transaction then go back to the Flutter app and update the contract balance.</p>
+<table>
+<tr><td colspan="2" rowspan="1"></td><td colspan="1" rowspan="1"></td></tr>
+<tr><td colspan="1" rowspan="1"><p class="image-container"><img src="img/902df16703564e2e.png"></p>
+</td><td colspan="1" rowspan="1"><p class="image-container"><img src="img/217d37475c406550.png"></p>
+</td></tr>
+</table>
+<p>This will be the content of your lib folder:</p>
+<pre><code>📦lib
+ ┣ 📂models
+ ┃ ┗ 📜wallet_transactions.dart
+ ┗ 📜main.dart
+
+</code></pre>
+<p>You need to make some modification to the <code>AndroidManifest.xml</code> in order for the app to detect Metamask. So go to the project folder at <code>android/app/src/main/</code> then add a <code>queries</code> tag next to the <code>application</code> tag. You will add the Metamask wallet scheme here.</p>
+<ul>
+<li><code>AndroidManifest.xml</code>:</li>
+</ul>
+<pre><code language="language-xml" class="language-xml">    &lt;queries&gt;
+        &lt;package android:name=&#34;io.metamask&#34;/&gt;
+        &lt;!-- Add other wallet schemes names here --&gt;
+    &lt;/queries&gt;
+    
+    &lt;application
+        android:label=&#34;flutter_dapp_sample&#34;
+        ......
+
+</code></pre>
+<p>Once done, you need to add the Web3modal package along with http. So under the project folder run <code>flutter pub add web3modal_flutter http</code>. You don&#39;t need to add web3dart package as it already bundle inside Web3Modal package.</p>
+<p>Also, another thing that important is to add our <code>contracts/artifacts</code> folder under assets in <code>pubspec.yaml</code> at the end to be able to load your contract info for deployment.</p>
+<ul>
+<li><code>pubspec.yaml</code>:</li>
+</ul>
+<pre><code language="language-yaml" class="language-yaml">...
+
+  assets:
+    - contracts/artifacts/
+
+</code></pre>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Building The Model" duration="0">
+        <p>For the model, you&#39;ll add <code>WalletTransactions</code> class to handle interaction with the smart contract. You will have a <code>projectID</code> environment variable to pass in your Wallet Connect Cloud id in order to interact with Metamask. Then, you&#39;ll declare Hardhat chain info to later add it to the list of network the Web3modal will initialize with. You will first initialize the W3MService passing your custom metadata to the project.</p>
+<p>After that you will prepare loading your contract that you will deploy by reading the <code>Logic.json</code> generated by Remix when you compiled the contract. In that json you need the contract bytecode for deployment and contract abi to be able to call the method on the contract. Since in your <code>logic.sol</code> you are also importing from <code>storage.sol</code>, you won&#39;t need to deploy <code>storage.sol</code> as it already added because of the import in the <code>logic.sol</code> file.</p>
+<p>The <code>addEtherRequest</code> and <code>retrieveEtherRequest</code> will allow you add a certain amount of ether or retrieve all of your deposits. Finally, you have two others methods to get the contract balance and get a instance of W3MService to pass in your other Wallet Connect button to listen the state.</p>
+<ul>
+<li><code>wallet_trasactions.dart</code>:</li>
+</ul>
+<pre><code language="language-dart" class="language-dart">import &#39;dart:convert&#39;;
+
+import &#39;package:flutter/material.dart&#39;;
+import &#39;package:flutter/services.dart&#39;;
+import &#39;package:http/http.dart&#39; as http;
+import &#39;package:web3modal_flutter/web3modal_flutter.dart&#39;;
+
+const projectID = String.fromEnvironment(&#39;PROJECT_ID&#39;);
+
+const _chainId = &#39;31337&#39;; //hardhat default chainId
+
+final _hardHatChain = W3MChainInfo(
+  chainName: &#39;Hardhat&#39;,
+  namespace: &#39;eip155:$_chainId&#39;,
+  chainId: _chainId,
+  tokenName: &#39;ETH&#39;,
+  rpcUrl: &#39;http://localhost:8545&#39;,
+);
+
+class WalletTransactions {
+  WalletTransactions() {
+    _loadContract();
+    _initWalletConnect();
+  }
+
+  late final W3MService _w3mService;
+  late final String _contractAbi;
+  late final Uint8List _contractData;
+  late final String _contractAddress;
+
+  void _initWalletConnect() async {
+    _w3mService = W3MService(
+      projectId: projectID,
+      // replace with your own info
+      metadata: const PairingMetadata(
+        name: &#39;Web3Modal Flutter Example&#39;,
+        description: &#39;A Sample Dapp in Flutter&#39;,
+        url: &#39;https://flutter.dev/&#39;,
+        // flutter logo on the web
+        icons: [&#39;https://storage.googleapis.com/cms-storage-bucket/0dbfcc7a59cd1cf16282.png&#39;],
+        redirect: Redirect(
+          native: &#39;flutterdapp://&#39;,
+          universal: &#39;https://www.walletconnect.com&#39;,
+        ),
+      ),
+    );
+
+    // add hardhat chain to presets
+    W3MChainPresets.chains
+        .putIfAbsent(_hardHatChain.chainId, () =&gt; _hardHatChain);
+    await _w3mService.init();
+  }
+
+  // load contract from Remix json
+  void _loadContract() async {
+    final contractCode =
+        await rootBundle.loadString(&#39;contracts/artifacts/Logic.json&#39;);
+    final abi = jsonDecode(contractCode)[&#39;abi&#39;];
+    final bytecode = jsonDecode(contractCode)[&#39;data&#39;][&#39;bytecode&#39;][&#39;object&#39;];
+
+    debugPrint(&#39;contract bytecode: $bytecode&#39;);
+    debugPrint(&#39;contract abi: ${abi.toString()}&#39;);
+
+    _contractAbi = jsonEncode(abi);
+    _contractData = hexToBytes(bytecode);
+  }
+
+  // to learn more about rpc methods:
+  // https://ethereum.org/en/developers/docs/apis/json-rpc/
+  void deployContract() async {
+    final client = Web3Client(_w3mService.selectedChain!.rpcUrl, http.Client());
+
+    final transaction = Transaction(
+      // you need to define the from when doing transaction to push contract code
+      from: EthereumAddress.fromHex(_w3mService.session!.address!),
+      data: _contractData,
+    );
+
+    // always launch the wallet before making a Transaction with Web3Modal
+    _w3mService.launchConnectedWallet();
+
+    final String transactionHash = await _w3mService.request(
+      topic: _w3mService.session!.topic!,
+      // we need the namespace format here
+      chainId: _w3mService.selectedChain!.namespace,
+      request: SessionRequestParams(
+        // w3model has string constant to help with request
+        method: MethodsConstants.ethSendTransaction,
+        params: [transaction.toJson()],
+      ),
+    );
+
+    debugPrint(&#39;hash: $transactionHash&#39;);
+
+    // web3modal doesn&#39;t support `eth_getTransactionHash` with _w3mService.request(). However, you have the Web3dart
+    // bundle in Web3Modal so you can use it to get the package like so.
+    // you can list what&#39;s available with _w3mService.session!.getApprovedMethods()
+    final transactionReceipt =
+        await client.getTransactionReceipt(transactionHash);
+    final transactionInformation =
+        await client.getTransactionByHash(transactionHash);
+    final networkId = await client.getNetworkId();
+
+    debugPrint(&#39;transactionReceipt: $transactionReceipt&#39;);
+    debugPrint(&#39;transactionInformation: $transactionInformation&#39;);
+    debugPrint(&#39;network: $networkId&#39;);
+
+    _contractAddress = transactionReceipt!.contractAddress!.hex;
+  }
+
+  void addEtherRequest({
+    required EtherUnit etherUnitValue,
+    required int amount,
+  }) async {
+    final client = Web3Client(_w3mService.selectedChain!.rpcUrl, http.Client());
+
+    _w3mService.launchConnectedWallet();
+    final String transactionHash = await _w3mService.requestWriteContract(
+      rpcUrl: _w3mService.selectedChain!.rpcUrl,
+      deployedContract: DeployedContract(
+        ContractAbi.fromJson(_contractAbi, &#39;logic_abi&#39;),
+        EthereumAddress.fromHex(_contractAddress),
+      ),
+      topic: _w3mService.session!.topic!,
+      chainId: _w3mService.selectedChain!.namespace,
+      functionName: &#39;add&#39;,
+      transaction: Transaction(
+        from: EthereumAddress.fromHex(_w3mService.session!.address!),
+        value: EtherAmount.fromInt(etherUnitValue, amount),
+      ),
+    );
+
+    final transactionReceipt =
+        await client.getTransactionReceipt(transactionHash);
+
+    debugPrint(&#39;Add Transaction: $transactionReceipt&#39;);
+  }
+
+  void retrieveEtherRequest() async {
+    final client = Web3Client(_w3mService.selectedChain!.rpcUrl, http.Client());
+
+    _w3mService.launchConnectedWallet();
+    final String transactionHash = await _w3mService.requestWriteContract(
+      rpcUrl: _w3mService.selectedChain!.rpcUrl,
+      deployedContract: DeployedContract(
+        ContractAbi.fromJson(_contractAbi, &#39;logic_abi&#39;),
+        EthereumAddress.fromHex(_contractAddress),
+      ),
+      topic: _w3mService.session!.topic!,
+      chainId: _w3mService.selectedChain!.namespace,
+      functionName: &#39;retrieve&#39;,
+      transaction: Transaction(
+        from: EthereumAddress.fromHex(_w3mService.session!.address!),
+      ),
+    );
+
+    final transactionReceipt =
+        await client.getTransactionReceipt(transactionHash);
+
+    debugPrint(&#39;Retrieve Transaction: $transactionReceipt&#39;);
+  }
+
+  Future&lt;EtherAmount&gt; get deployedContractBalance async {
+    final client = Web3Client(_w3mService.selectedChain!.rpcUrl, http.Client());
+    return client.getBalance(EthereumAddress.fromHex(_contractAddress));
+  }
+
+  W3MService get w3MService {
+    return _w3mService;
+  }
+}
+
+</code></pre>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Adding The Widgets" duration="0">
+        <p>The widgets are pretty much straighforward. You create an instance of the <code>WalletTransactions</code> and pass the values or use it to call methods to process the transactions in Metamask. In the Web3Modal, you can also change the overall theme when using the connect or changing chain buttons.</p>
+<ul>
+<li><code>main.dart</code>:</li>
+</ul>
+<pre><code language="language-dart" class="language-dart">import &#39;package:cryptofont/cryptofont.dart&#39;;
+import &#39;package:flutter/material.dart&#39;;
+import &#39;package:flutter_dapp_sample/models/wallet_transactions.dart&#39;;
+import &#39;package:web3modal_flutter/web3modal_flutter.dart&#39;;
+
+final _themeData = ThemeData(
+  colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+);
+
+void main() async {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Web3ModalTheme(
+      themeData: Web3ModalThemeData(
+        lightColors: Web3ModalColors.lightMode.copyWith(
+          accent100: _themeData.colorScheme.primary,
+          background125: _themeData.colorScheme.background,
+        ),
+      ),
+      child: MaterialApp(
+        title: &#39;Flutter Dapp Demo&#39;,
+        theme: _themeData,
+        home: const MyHomePage(title: &#39;Flutter Dapp Demo&#39;),
+      ),
+    );
+  }
+}
+
+class MyHomePage extends StatefulWidget {
+  const MyHomePage({super.key, required this.title});
+  final String title;
+
+  @override
+  State&lt;MyHomePage&gt; createState() =&gt; _MyHomePageState();
+}
+
+class _MyHomePageState extends State&lt;MyHomePage&gt; {
+  late final WalletTransactions walletTransactions;
+
+  var _etherUnitValue = EtherUnit.values.first;
+  final _textEditAmount = TextEditingController();
+  var _currentContractBalance = 0.0;
+
+  @override
+  initState() {
+    super.initState();
+    walletTransactions = WalletTransactions();
+  }
+
+  void _addEtherRequest() async {
+    walletTransactions.addEtherRequest(
+      etherUnitValue: _etherUnitValue,
+      amount: int.parse(_textEditAmount.text),
+    );
+
+    final contractAmount = await walletTransactions.deployedContractBalance;
+    setState(() {
+      _currentContractBalance = contractAmount.getValueInUnit(EtherUnit.ether);
+    });
+  }
+
+  void _retrieveEtherRequest() async {
+    walletTransactions.retrieveEtherRequest();
+
+    final contractAmount = await walletTransactions.deployedContractBalance;
+    setState(() {
+      _currentContractBalance = contractAmount.getValueInUnit(EtherUnit.ether);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: Text(widget.title),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: &lt;Widget&gt;[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                ImageIcon(
+                  const AssetImage(&#39;assets/logo_wc.png&#39;),
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 48,
+                ),
+                W3MConnectWalletButton(service: walletTransactions.w3MService),
+              ],
+            ),
+            const SizedBox(height: 32),
+            // connect your wallet buttons
+            W3MNetworkSelectButton(service: walletTransactions.w3MService),
+            W3MAccountButton(service: walletTransactions.w3MService),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: walletTransactions.deployContract,
+              icon: const Icon(Icons.rocket_launch),
+              label: const Text(&#39;Deploy Contract&#39;),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton(
+                        iconEnabledColor: Theme.of(context).colorScheme.primary,
+                        value: _etherUnitValue,
+                        items: EtherUnit.values
+                            .map(
+                              (e) =&gt; DropdownMenuItem&lt;EtherUnit&gt;(
+                                value: e,
+                                child: Text(
+                                  e.name.toUpperCase(),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelLarge!
+                                      .copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _etherUnitValue = value!;
+                          });
+                        }),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _textEditAmount,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        prefixIcon: Icon(
+                          CryptoFontIcons.eth,
+                          color: Theme.of(context).primaryColor,
+                        ),
+                        labelText: &#39;Amount&#39;,
+                      ),
+                    ),
+                  ),
+                  ElevatedButton(
+                    onPressed: _addEtherRequest,
+                    child: const Text(&#39;Deposit&#39;),
+                  )
+                ],
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: _retrieveEtherRequest,
+              icon: const Icon(Icons.savings),
+              label: const Text(&#39;Retrieve Savings&#39;),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              &#39;Contract Balance\n $_currentContractBalance ETH&#39;,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+</code></pre>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Running the app" duration="0">
+        <p>Now you should be set to run the app. Before you do, see that you&#39;ve done the following steps:</p>
+<ol type="1">
+<li>Make sure you&#39;re running a Hardhat test chain node: <code>npx hardhat node</code></li>
+<li>Make sure your Android phone is connected by USB.</li>
+<li>Make sure your can connect to the Hardhat RPC localhost: <code>./adb reverse tcp:8545 tcp:8545</code>.</li>
+<li>Make sure your Metamask is on Hardhat network.</li>
+<li>Finally run the Flutter app with this command: <code>flutter run --dart-define=PROJECT_ID={your wallet connect id}</code>.</li>
+</ol>
+<p>See the result of your code.</p>
+<p>If you have trouble running the app, you can compare your code from the github repository.</p>
+<p><a href="https://github.com/emmanuelCode/dapp-flutter" target="_blank"><paper-button class="colored" raised>View Codelab Code</paper-button></a></p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Congratulations!" duration="0">
+        <p>You&#39;re now able to build decentralized application with Flutter!</p>
+<h2 is-upgraded>References</h2>
+<p>Some references that help me with the contents of this codelab.</p>
+<p><a href="https://remix-project.org/" target="_blank">Remix Project</a></p>
+<p><a href="https://hardhat.org/" target="_blank">Hardhat</a></p>
+<p><a href="https://metamask.io/" target="_blank">Metamask</a></p>
+<p><a href="https://web3modal.com/" target="_blank">Web3Modal</a></p>
+<p><a href="https://docs.walletconnect.com/web3modal/flutter/installation" target="_blank">Web3Modal Flutter docs</a></p>
+<p><a href="https://pub.dev/documentation/web3dart/latest/" target="_blank">Web3dart docs</a></p>
+<p><a href="https://dart.dev/guides/environment-declarations" target="_blank">Dart Environment Declaration</a></p>
+<p><a href="https://ethereum.org/en/developers/docs/apis/json-rpc/" target="_blank">Ethereum JSON RPC API</a></p>
+<h2 is-upgraded>Feedback</h2>
+<p>This codelab may have some issues and to me this is only a draft, they are improvements that can be done. If you found a problem or have suggestions, you can click the <code>report a mistake</code> on the bottom left of the codelab it will open a github issue.</p>
+
+
+      </google-codelab-step>
+    
+  </google-codelab>
+
+  <script src="https://storage.googleapis.com/claat-public/native-shim.js"></script>
+  <script src="https://storage.googleapis.com/claat-public/custom-elements.min.js"></script>
+  <script src="https://storage.googleapis.com/claat-public/prettify.js"></script>
+  <script src="https://storage.googleapis.com/claat-public/codelab-elements.js"></script>
+  <script src="//support.google.com/inapp/api.js"></script>
+
+</body>
+</html>
